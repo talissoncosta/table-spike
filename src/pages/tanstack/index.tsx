@@ -1,42 +1,50 @@
-import React from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   flexRender,
-  createColumnHelper,
   type SortingState,
+  type ColumnDef,
 } from '@tanstack/react-table';
-import { generateColumns, generateRows } from '../../data/dataset.ts';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { generateTableData } from '../../data/dataset';
 
-type RowData = Record<string, string>;
+type RowData = Record<string, string | number | boolean>;
 
 interface TanStackTableProps {
   rowCount: number;
   columnCount?: number;
 }
+console.time('Initial render')
+
 
 export const TanStackTable = ({ rowCount, columnCount = 10 }: TanStackTableProps) => {
-  const columnsList = React.useMemo(() => generateColumns(columnCount), [columnCount]);
-  const data = React.useMemo(() => generateRows(rowCount, columnsList), [rowCount, columnsList]);
+  const { rows, columns } = generateTableData(rowCount, columnCount);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [totalDomEl, setTotalDomEl] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const columnHelper = React.useMemo(() => createColumnHelper<RowData>(), []);
-  const columns = React.useMemo(
-    () =>
-      columnsList.map((key) =>
-        columnHelper.accessor(key, {
-          header: key,
-          cell: (info) => info.getValue(),
-        })
-      ),
-    [columnsList, columnHelper]
-  );
-
-  const [sorting, setSorting] = React.useState<SortingState>([]);
+  // Create column definitions dynamically
+  const columnDefs: ColumnDef<RowData>[] = columns.map((columnName) => ({
+    accessorKey: columnName,
+    header: () => (
+      <div style={{ cursor: 'pointer', userSelect: 'none' }}>
+        {columnName}
+      </div>
+    ),
+    cell: ({ getValue }) => {
+      const value = getValue();
+      if (typeof value === 'boolean') {
+        return value ? '✓' : '✗';
+      }
+      return String(value);
+    },
+  }));
 
   const table = useReactTable({
-    data,
-    columns,
+    data: rows,
+    columns: columnDefs,
     state: { sorting },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
@@ -44,60 +52,99 @@ export const TanStackTable = ({ rowCount, columnCount = 10 }: TanStackTableProps
     debugTable: false,
   });
 
+  const virtualizer = useVirtualizer({
+    count: table.getRowModel().rows.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 36,
+    overscan: 10,
+  });
+
+  useEffect(() => {
+    console.timeEnd('Initial render');
+    const tdCount = document.querySelectorAll('td').length;
+    const thCount = document.querySelectorAll('th').length;
+    const trCount = document.querySelectorAll('tr').length;
+    const total = tdCount + thCount + trCount;
+    console.log(`DOM Report → <td>: ${tdCount}, <th>: ${thCount}, <tr>: ${trCount}, TOTAL: ${total}`);
+    setTotalDomEl(total);
+  }, [rows.length]);
+
+  const virtualRows = virtualizer.getVirtualItems();
+  const paddingTop = virtualRows[0]?.start || 0;
+  const paddingBottom =
+    virtualizer.getTotalSize() -
+    (virtualRows[virtualRows.length - 1]?.end || 0);
+
   return (
-    <div style={{ padding: 20 }}>
-      <h2>TanStack Table</h2>
-      <p>
-        Rows: <strong>{rowCount}</strong> | Columns: <strong>{columnCount}</strong>
-      </p>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+    <div>
+      <div>COLUMNS: {columnCount}</div>
+      <div>ROWS: {rowCount}</div>
+      <div>TOTAL DOM ELEMENTS: {totalDomEl}</div>
+
+      <div
+        ref={containerRef}
+        style={{
+          height: '600px',
+          overflowY: 'auto',
+          border: '1px solid #ccc',
+        }}
+      >
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  colSpan={header.colSpan}
-                  style={{
-                    border: '1px solid #ccc',
-                    cursor: 'pointer',
-                    padding: '8px',
-                    backgroundColor: '#f8f8f8',
-                  }}
-                  onClick={header.column.getToggleSortingHandler()}
-                >
-                  {flexRender(header.column.columnDef.header, header.getContext())}
-                  {{
-                    asc: ' 🔼',
-                    desc: ' 🔽',
-                  }[header.column.getIsSorted() as string] ?? null}
-                </th>
-              ))}
-            </tr>
-          ))}
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <th 
+                    key={header.id} 
+                    style={{ 
+                      border: '1px solid #ccc', 
+                      padding: '4px',
+                      backgroundColor: '#f5f5f5',
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 1,
+                    }}
+                    onClick={header.column.getToggleSortingHandler()}
+                  >
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {{
+                      asc: ' ↑',
+                      desc: ' ↓',
+                    }[header.column.getIsSorted() as string] ?? null}
+                  </th>
+                ))}
+              </tr>
+            ))}
           </thead>
           <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <td
-                  key={cell.id}
-                  style={{
-                    border: '1px solid #ddd',
-                    padding: '6px',
-                    fontFamily: 'monospace',
-                  }}
-                >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
+            {paddingTop > 0 && (
+              <tr>
+                <td colSpan={columnCount} style={{ height: `${paddingTop}px` }} />
+              </tr>
+            )}
+            {virtualRows.map((virtualRow: any) => {
+              const row = table.getRowModel().rows[virtualRow.index];
+              return (
+                <tr key={row.id}>
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} style={{ border: '1px solid #eee', padding: '4px' }}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+            {paddingBottom > 0 && (
+              <tr>
+                <td colSpan={columnCount} style={{ height: `${paddingBottom}px` }} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
     </div>
   );
 };
+
+export default TanStackTable;
 

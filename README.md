@@ -23,7 +23,7 @@ Each solution is assessed across the following dimensions:
 ## 🔬 Work In Progress
 
 ### 📁 Structure
-
+```
 table-spike/
   data
     └── dataset               # Scripts to generate large datasets
@@ -33,10 +33,10 @@ table-spike/
     ├── cui-table/            # Current implementation from the monolith
   results
     └── evaluation            # Findings, notes, and comparison matrix
-
+```
 ### 🧪 Scenarios Tested
 
-- 10k+ rows × 100+ columns rendering
+- 10k rows × 100 columns rendering
 - Sorting & filtering (column-level)
 - Column reordering and resizing
 - Custom cell rendering (e.g., icons, avatars)
